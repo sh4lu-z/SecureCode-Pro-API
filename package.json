@@ -1,0 +1,26 @@
+{
+  "name": "securecode-pro-api",
+  "version": "1.0.0",
+  "description": "Standalone ZIP Obfuscation API for SecureCode-Pro",
+  "main": "server.js",
+  "scripts": {
+    "start": "ts-node server.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@babel/core": "^7.26.0",
+    "express": "^4.21.2",
+    "javascript-obfuscator": "^4.1.1",
+    "jszip": "^3.10.1",
+    "multer": "^1.4.5-lts.1",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.10.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  }
+}
