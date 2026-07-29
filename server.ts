@@ -3,6 +3,7 @@ import cors from 'cors';
 import multer from 'multer';
 import JSZip from 'jszip';
 import JavaScriptObfuscator from 'javascript-obfuscator';
+import * as babel from '@babel/core';
 import { applyCustomObfuscation } from './custom-obfuscator';
 import { webcrypto } from 'crypto';
 
@@ -197,8 +198,23 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
     };
 
     const processCode = async (code: string) => {
+      // 0. Transpile ES6+ to ES5 to avoid TDZ issues with let/const
+      let transpiledCode = code;
+      try {
+        const babelResult = await babel.transformAsync(code, {
+           presets: ['@babel/preset-env'],
+           ast: false,
+           sourceType: 'unambiguous'
+        });
+        if (babelResult && babelResult.code) {
+           transpiledCode = babelResult.code;
+        }
+      } catch (err) {
+        console.warn("Babel transpilation failed, skipping...", err);
+      }
+
       // 1. Standard Obfuscator
-      const obfuscationResult = JavaScriptObfuscator.obfuscate(code, obfuscatorOptions);
+      const obfuscationResult = JavaScriptObfuscator.obfuscate(transpiledCode, obfuscatorOptions);
       let result = obfuscationResult.getObfuscatedCode();
       
       // 2. Custom Babel Obfuscator
