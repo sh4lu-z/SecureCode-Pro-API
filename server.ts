@@ -169,6 +169,7 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
         stringArrayCallsTransformThreshold: 1,
         stringArrayWrappersCount: 5,
         stringArrayWrappersChained: true,
+        stringArrayWrappersType: 'function',
         stringArrayWrappersParametersMaxCount: 5,
         simplify: true
       } : {}),
@@ -225,21 +226,6 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
       
       // 3. DRM / Anti-LLM Injection
       result = applyAdvancedProtection(result, settings, llmPublicKey);
-      
-      // 4. Final ES5 Transpilation (Fix TDZ for Obfuscator-generated const/let)
-      try {
-        const babelResult = await babel.transformAsync(result, {
-           presets: [['@babel/preset-env', { targets: "ie 11" }]],
-           compact: true,
-           ast: false,
-           sourceType: 'unambiguous'
-        });
-        if (babelResult && babelResult.code) {
-           result = babelResult.code;
-        }
-      } catch (err) {
-        console.warn("Final Babel transpilation failed, skipping...", err);
-      }
       
       return result;
     };
