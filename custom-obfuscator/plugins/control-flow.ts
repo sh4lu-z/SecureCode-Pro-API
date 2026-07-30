@@ -14,8 +14,7 @@ import * as t from '@babel/types';
 import type { NodePath } from '@babel/traverse';
 
 const STATE_NAMES = [
-  '_sh4lu_z_state', '_syntiox_ctx', '_gimhan_pc',
-  '_shaluka_ptr', '_sx_dispatch', '_sg_flow'
+  's2', 'a1', 't9', 'x5', 'r4', 'v7', 'q3'
 ];
 
 const RESULT_NAMES = [
@@ -77,7 +76,8 @@ function flattenFunction(path: NodePath<t.FunctionDeclaration | t.FunctionExpres
   );
   if (hasComplexConstruct) return;
 
-  const stateName = randomFrom(STATE_NAMES) + '_' + Math.random().toString(36).substring(2, 4);
+  const stateName = randomFrom(STATE_NAMES);
+  const stateIdx = Math.floor(Math.random() * 8) + 1; // e.g. 6
   const resultName = randomFrom(RESULT_NAMES) + '_' + Math.random().toString(36).substring(2, 4);
   const stateValues = generateStateValues(statements.length);
   const endState = stateValues[stateValues.length - 1];
@@ -104,7 +104,7 @@ function flattenFunction(path: NodePath<t.FunctionDeclaration | t.FunctionExpres
       }
       caseBody.push(
         t.expressionStatement(
-          t.assignmentExpression('=', t.identifier(stateName), t.numericLiteral(endState))
+          t.assignmentExpression('=', t.memberExpression(t.identifier(stateName), t.numericLiteral(stateIdx), true), t.numericLiteral(endState))
         )
       );
       caseBody.push(t.breakStatement());
@@ -112,7 +112,7 @@ function flattenFunction(path: NodePath<t.FunctionDeclaration | t.FunctionExpres
       caseBody.push(stmt);
       caseBody.push(
         t.expressionStatement(
-          t.assignmentExpression('=', t.identifier(stateName), t.numericLiteral(nextState))
+          t.assignmentExpression('=', t.memberExpression(t.identifier(stateName), t.numericLiteral(stateIdx), true), t.numericLiteral(nextState))
         )
       );
       caseBody.push(t.breakStatement());
@@ -138,19 +138,23 @@ function flattenFunction(path: NodePath<t.FunctionDeclaration | t.FunctionExpres
   
   // Build the new function body
   const newBody: t.Statement[] = [
-    // var _sh4lu_z_state = <initial_state>;
+    // var s2 = [];
     t.variableDeclaration('var', [
-      t.variableDeclarator(t.identifier(stateName), t.numericLiteral(stateValues[0]))
+      t.variableDeclarator(t.identifier(stateName), t.arrayExpression([]))
     ]),
+    // s2[6] = <initial_state>;
+    t.expressionStatement(
+      t.assignmentExpression('=', t.memberExpression(t.identifier(stateName), t.numericLiteral(stateIdx), true), t.numericLiteral(stateValues[0]))
+    ),
     // var _syntiox_r;
     t.variableDeclaration('var', [
       t.variableDeclarator(t.identifier(resultName))
     ]),
-    // while(true) { switch(_sh4lu_z_state) { ... } }
+    // while(true) { switch(s2[6]) { ... } }
     t.whileStatement(
       t.booleanLiteral(true),
       t.blockStatement([
-        t.switchStatement(t.identifier(stateName), cases)
+        t.switchStatement(t.memberExpression(t.identifier(stateName), t.numericLiteral(stateIdx), true), cases)
       ])
     )
   ];
