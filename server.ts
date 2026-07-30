@@ -200,6 +200,11 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
     };
 
     const processCode = async (code: string, isSecondaryHtmlScript: boolean = false) => {
+      // Skip tiny secondary scripts to save massive processing time
+      if (isSecondaryHtmlScript && code.trim().length < 50) {
+        return code;
+      }
+
       // 0. Transpile ES6+ to ES5 to avoid TDZ issues and convert exports (so opaque predicates don't wrap exports)
       let transpiledCode = code;
       try {
@@ -217,11 +222,14 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
         console.warn("Babel transpilation failed, skipping...", err);
       }
 
-      // Safe options for secondary HTML inline scripts to prevent browser freezing from duplication
+      // Safe and FAST options for secondary HTML inline scripts to prevent browser freezing and Render timeouts
       const currentObfuscatorOptions = isSecondaryHtmlScript ? {
         ...obfuscatorOptions,
         debugProtection: false,
-        selfDefending: false
+        selfDefending: false,
+        controlFlowFlattening: false,
+        deadCodeInjection: false,
+        stringArrayWrappersCount: 1
       } : obfuscatorOptions;
 
       // 1. Standard Obfuscator
