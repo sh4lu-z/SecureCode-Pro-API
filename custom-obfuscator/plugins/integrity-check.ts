@@ -33,10 +33,10 @@ function randomSuffix(): string {
  * FNV-1a hash (32-bit) — fast, deterministic, good distribution
  */
 function fnv1a(str: string): number {
-  let hash = 0x811c9dc5; // FNV offset basis
+  let hash = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
     hash ^= str.charCodeAt(i);
-    hash = (hash * 0x01000193) >>> 0; // FNV prime, keep as uint32
+    hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return hash;
 }
@@ -50,26 +50,30 @@ export function applyIntegrityCheck(code: string): string {
   const funcName = randomFrom(FUNC_NAMES) + '_' + randomSuffix();
   const markerComment = `/*__INTEGRITY_BOUNDARY_${Math.random().toString(36).substring(2, 8).toUpperCase()}__*/`;
   
-  // The code AFTER the marker is what we hash
-  const codeToHash = code;
-  const expectedHash = fnv1a(codeToHash);
-  
-  // Build the integrity checker as a string
-  // It re-reads itself, hashes the code portion, and compares
-  const integrityCode = `
-var ${hashVarName} = ${expectedHash >>> 0};
-var ${funcName} = function() {
+  // Create the exact string that the function's toString() will return.
+  // We remove whitespace so it's consistent regardless of browser formatting.
+  // We use a named function expression to avoid arguments.callee (which breaks in strict mode).
+  const validatorCore = `function _sc_fn() {
   try {
-    var _sc = arguments.callee.toString ? arguments.callee.toString() : '';
+    var _sc = _sc_fn.toString().replace(/\\s+/g, '');
     if (_sc.length < 10) return;
     var _h = 0x811c9dc5;
     for (var _i = 0; _i < _sc.length; _i++) {
       _h ^= _sc.charCodeAt(_i);
       _h = Math.imul(_h, 0x01000193) >>> 0;
     }
-    if (_h !== _h) { while(true) {} }
+    if (_h !== ${hashVarName}) { while(true) {} }
   } catch(_e) {}
-};
+}`;
+
+  // Hash the function itself (whitespace stripped) to validate its own integrity
+  const codeToHash = validatorCore.replace(/\s+/g, '');
+  const expectedHash = fnv1a(codeToHash);
+  
+  // Build the integrity checker as a string
+  const integrityCode = `
+var ${hashVarName} = ${expectedHash >>> 0};
+var ${funcName} = ${validatorCore};
 ${funcName}();
 ${markerComment}
 `;

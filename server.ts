@@ -85,9 +85,9 @@ const applyAdvancedProtection = (code: string, settings: any, publicKeyPem?: str
     const randStr = () => Math.random().toString(36).substring(2).toUpperCase();
     
     const injections = [
-      `\ntypeof window!=='undefined'&&(window['__REACT_RENDER_CTX_${randStr()}__']=typeof atob!=='undefined'?atob("${b64}"):"${b64}");\n`,
-      `\ntypeof global!=='undefined'&&(global['__WEBPACK_CHUNK_LOADER_${randStr()}__']=typeof atob!=='undefined'?atob("${b64}"):"${b64}");\n`,
-      `\ntypeof document!=='undefined'&&(document['__SECURITY_TOKEN_${randStr()}__']=typeof atob!=='undefined'?atob("${b64}"):"${b64}");\n`
+      `\ntypeof window!=='undefined'&&(window['__REACT_RENDER_CTX_${randStr()}__']=typeof atob!=='undefined'?decodeURIComponent(escape(atob("${b64}"))):"${b64}");\n`,
+      `\ntypeof global!=='undefined'&&(global['__WEBPACK_CHUNK_LOADER_${randStr()}__']=typeof atob!=='undefined'?decodeURIComponent(escape(atob("${b64}"))):"${b64}");\n`,
+      `\ntypeof document!=='undefined'&&(document['__SECURITY_TOKEN_${randStr()}__']=typeof atob!=='undefined'?decodeURIComponent(escape(atob("${b64}"))):"${b64}");\n`
     ];
 
     finalCode = injections[0] + finalCode;
@@ -107,14 +107,14 @@ const applyAdvancedProtection = (code: string, settings: any, publicKeyPem?: str
     const commentBlock = `\n/**\n${lines}\n */\n`;
     
     const c_b64 = toBase64(settings.copyrightMessage);
-    const sideEffect = `\ntypeof window!=='undefined'&&(window['__COPYRIGHT_META_${Math.random().toString(36).substring(2).toUpperCase()}__']=typeof atob!=='undefined'?atob("${c_b64}"):"${c_b64}");\n`;
+    const sideEffect = `\ntypeof window!=='undefined'&&(window['__COPYRIGHT_META_${Math.random().toString(36).substring(2).toUpperCase()}__']=typeof atob!=='undefined'?decodeURIComponent(escape(atob("${c_b64}"))):"${c_b64}");\n`;
 
     let injectionsNeeded = settings.copyrightCount;
     finalCode = commentBlock + sideEffect + finalCode;
     injectionsNeeded--;
 
     if (injectionsNeeded > 0) {
-       const splitTokens = [';var ', ';function ', ';}catch', ';}finally', ';}while', ';for(', ';if('];
+       const splitTokens = [';var ', ';function ', ';for(', ';if('];
        for (const token of splitTokens) {
          if (injectionsNeeded <= 0) break;
          if (finalCode.includes(token)) {
@@ -189,13 +189,13 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
       deadCodeInjection: !settings.fastMode && (settings.deadCode || 0) > 0,
       deadCodeInjectionThreshold: settings.fastMode ? 0 : (settings.deadCode || 0) / 100,
       stringArray: settings.stringEncryption !== 'none',
-      stringArrayEncoding: settings.stringEncryption === 'none' ? [] : [settings.stringEncryption],
+      stringArrayEncoding: !settings.stringEncryption || settings.stringEncryption === 'none' ? [] : [settings.stringEncryption],
       stringArrayWrappersType: 'variable' as const,
       ...(settings.antiDeobfuscator ? {
         numbersToExpressions: true,
         splitStrings: true,
         splitStringsChunkLength: 3,
-        stringArrayCallsTransform: true,
+        stringArrayCallsTransform: settings.stringEncryption !== 'none',
         stringArrayCallsTransformThreshold: settings.fastMode ? 0.2 : 1,
         stringArrayWrappersCount: settings.fastMode ? 1 : 5,
         stringArrayWrappersChained: !settings.fastMode,
@@ -280,11 +280,20 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
     console.log(`[Start] Processing ${files.length} files in ZIP...`);
     
     for (const path of files) {
+      await new Promise(resolve => setImmediate(resolve)); // Yield to event loop to prevent DoS
+
       const zipEntry = loadedZip.files[path];
       
-      // Ignore dangerous or large directories
+      if (path.endsWith('.map')) {
+        continue; // Delete source maps to prevent source code leaks
+      }
+
+      // Ignore dangerous or large directories but copy them without obfuscating
       const ignoredMatch = path.match(/(^|\/)(node_modules|\.git|\.next|dist|build)(\/|$)/);
-      if (ignoredMatch) continue;
+      if (ignoredMatch) {
+        if (!zipEntry.dir) outputZip.file(path, await zipEntry.async('nodebuffer'));
+        continue;
+      }
 
       if (!zipEntry.dir) {
         const isJs = (path.endsWith('.js') || path.endsWith('.ts') || path.endsWith('.cjs') || path.endsWith('.mjs')) && !path.endsWith('.min.js');

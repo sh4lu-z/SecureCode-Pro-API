@@ -38,14 +38,7 @@ function xorEncrypt(str: string, key: string): string {
   return result;
 }
 
-function stringToHexEscape(str: string): string {
-  let result = '';
-  for (let i = 0; i < str.length; i++) {
-    const hex = str.charCodeAt(i).toString(16);
-    result += '\\x' + (hex.length < 2 ? '0' + hex : hex);
-  }
-  return result;
-}
+
 
 // Strings shorter than this won't be encrypted (to avoid bloat on tiny strings)
 const MIN_STRING_LENGTH = 2;
@@ -90,6 +83,8 @@ export default function stringEncryptionPlugin(): any {
               }
               // Don't encrypt object keys
               if (strPath.parentPath?.isObjectProperty() && strPath.parentPath.node.key === strPath.node) return;
+              if (strPath.parentPath?.isObjectMethod() && strPath.parentPath.node.key === strPath.node) return;
+              if (strPath.parentPath?.isClassMethod() && strPath.parentPath.node.key === strPath.node) return;
               // Don't encrypt require() calls
               if (strPath.parentPath?.isCallExpression() && 
                   t.isIdentifier(strPath.parentPath.node.callee) && 
@@ -104,7 +99,6 @@ export default function stringEncryptionPlugin(): any {
           
           // Replace each string with a call to the decoder
           for (const { nodePath, encrypted } of stringsToEncrypt) {
-            const hexStr = stringToHexEscape(encrypted);
             nodePath.replaceWith(
               t.callExpression(
                 t.identifier(decoderName),

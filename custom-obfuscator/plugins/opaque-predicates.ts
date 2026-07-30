@@ -207,16 +207,8 @@ export default function opaquePredicatesPlugin(): any {
               // Since predicate is always true, the else branch NEVER executes
               if (i + 1 < body.length) {
                 const nextStmt = body[i + 1];
-                if (t.isFunctionDeclaration(nextStmt) || t.isVariableDeclaration(nextStmt)) {
-                  // Do not wrap functions or vars (breaks hoisting/scoping)
-                  newBody.push(
-                    t.ifStatement(
-                      t.unaryExpression('!', predicate.test),
-                      t.blockStatement(fakeBody)
-                    )
-                  );
-                } else {
-                  // Wrap expression statements safely
+                // Wrap expression statements safely
+                if (t.isExpressionStatement(nextStmt)) {
                   newBody.push(
                     t.ifStatement(
                       predicate.test,
@@ -225,6 +217,14 @@ export default function opaquePredicatesPlugin(): any {
                     )
                   );
                   i++; // Skip the next statement since we wrapped it
+                } else {
+                  // Do not wrap functions, vars, imports, exports, classes, etc.
+                  newBody.push(
+                    t.ifStatement(
+                      t.unaryExpression('!', predicate.test),
+                      t.blockStatement(fakeBody)
+                    )
+                  );
                 }
               } else {
                 // At end of body, just inject a standalone guard

@@ -72,7 +72,8 @@ function flattenFunction(path: NodePath<t.FunctionDeclaration | t.FunctionExpres
   // Skip if body contains complex constructs that are hard to flatten
   const hasComplexConstruct = statements.some(s => 
     t.isTryStatement(s) || t.isForInStatement(s) || t.isForOfStatement(s) ||
-    t.isSwitchStatement(s) || t.isClassDeclaration(s) || t.isWithStatement(s)
+    t.isSwitchStatement(s) || t.isClassDeclaration(s) || t.isWithStatement(s) ||
+    (t.isVariableDeclaration(s) && (s.kind === 'let' || s.kind === 'const'))
   );
   if (hasComplexConstruct) return;
 
