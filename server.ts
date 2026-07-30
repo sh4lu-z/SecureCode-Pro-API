@@ -185,9 +185,9 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
     const obfuscatorOptions = {
       compact: true,
       controlFlowFlattening: (settings.controlFlow || 0) > 0,
-      controlFlowFlatteningThreshold: (settings.controlFlow || 0) / 100,
-      deadCodeInjection: (settings.deadCode || 0) > 0,
-      deadCodeInjectionThreshold: (settings.deadCode || 0) / 100,
+      controlFlowFlatteningThreshold: settings.fastMode ? Math.min((settings.controlFlow || 0) / 100, 0.4) : (settings.controlFlow || 0) / 100,
+      deadCodeInjection: !settings.fastMode && (settings.deadCode || 0) > 0,
+      deadCodeInjectionThreshold: settings.fastMode ? 0 : (settings.deadCode || 0) / 100,
       stringArray: settings.stringEncryption !== 'none',
       stringArrayEncoding: settings.stringEncryption === 'none' ? [] : [settings.stringEncryption],
       stringArrayWrappersType: 'variable' as const,
@@ -196,14 +196,17 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
         splitStrings: true,
         splitStringsChunkLength: 3,
         stringArrayCallsTransform: true,
-        stringArrayCallsTransformThreshold: 1,
-        stringArrayWrappersCount: 5,
-        stringArrayWrappersChained: true,
+        stringArrayCallsTransformThreshold: settings.fastMode ? 0.2 : 1,
+        stringArrayWrappersCount: settings.fastMode ? 1 : 5,
+        stringArrayWrappersChained: !settings.fastMode,
         stringArrayWrappersType: 'function' as const,
-        stringArrayWrappersParametersMaxCount: 5,
+        stringArrayWrappersParametersMaxCount: settings.fastMode ? 2 : 5,
         simplify: true
       } : {}),
-      ...(settings.antiLLM ? {
+      ...(settings.fastMode ? {
+        identifierNamesGenerator: 'mangled' as const,
+        identifiersPrefix: '' // Cloudflare doesn't use prefix
+      } : settings.antiLLM ? {
         identifierNamesGenerator: 'dictionary' as const,
         identifiersDictionary: [
           'PaymentGateway', 'StripeAPI', 'ProcessTransaction', 'VerifySignature', 'GenerateToken',
@@ -216,7 +219,7 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
       }),
       selfDefending: !!settings.selfDefending,
       debugProtection: !!settings.debugProtection,
-      identifiersPrefix: prefix,
+      identifiersPrefix: settings.fastMode ? '' : prefix,
       ignoreRequireImports: true,
       target: 'browser-no-eval' as const
     };
