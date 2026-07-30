@@ -169,7 +169,7 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
         stringArrayCallsTransformThreshold: 1,
         stringArrayWrappersCount: 5,
         stringArrayWrappersChained: true,
-        stringArrayWrappersType: 'function',
+        stringArrayWrappersType: 'function' as const,
         stringArrayWrappersParametersMaxCount: 5,
         simplify: true
       } : {}),
