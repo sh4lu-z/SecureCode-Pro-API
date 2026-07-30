@@ -232,6 +232,7 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
 
     // Sequential Processing Loop (One-by-one to save RAM)
     const files = Object.keys(loadedZip.files);
+    console.log(`[Start] Processing ${files.length} files in ZIP...`);
     
     for (const path of files) {
       const zipEntry = loadedZip.files[path];
@@ -245,14 +246,18 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
         const isHtml = path.endsWith('.html') || path.endsWith('.htm');
         
         if (isJs) {
+          console.log(`[JS] Obfuscating: ${path}`);
           const content = await zipEntry.async('string');
           try {
             const protectedCode = await processCode(content);
             outputZip.file(path, protectedCode);
-          } catch (e) {
+            console.log(`  -> JS Success!`);
+          } catch (e: any) {
+            console.error(`  -> [Error] Failed JS: ${e.message}`);
             outputZip.file(path, content); // Fallback to original
           }
         } else if (isHtml) {
+          console.log(`[HTML] Scanning for scripts: ${path}`);
           const content = await zipEntry.async('string');
           let resultHtml = "";
           let lastIndex = 0;
@@ -277,12 +282,14 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
             try {
               const protectedScript = await processCode(scriptContent);
               resultHtml += `${openTag}\n${protectedScript}\n${closeTag}`;
-            } catch (e) {
+            } catch (e: any) {
+              console.warn(`  -> [Warning] Failed HTML inline script: ${e.message}`);
               resultHtml += fullMatch;
             }
           }
           resultHtml += content.substring(lastIndex);
           outputZip.file(path, resultHtml);
+          console.log(`  -> HTML Success!`);
         } else {
           // Copy other files (images, css, etc.)
           const buffer = await zipEntry.async('nodebuffer');
@@ -293,6 +300,11 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
       // Force Garbage Collection to clear memory before next file
       if (global.gc) {
         global.gc();
+      }
+      
+      const memUsage = process.memoryUsage().heapUsed / 1024 / 1024;
+      if (isJs || isHtml) {
+        console.log(`[Mem] Heap Used: ${memUsage.toFixed(2)} MB`);
       }
     }
 
