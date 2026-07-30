@@ -199,7 +199,22 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
     };
 
     const processCode = async (code: string) => {
+      // 0. Transpile ES6+ to ES5 to avoid TDZ issues and convert exports (so opaque predicates don't wrap exports)
       let transpiledCode = code;
+      try {
+        const babelResult = await babel.transformAsync(code, {
+           presets: [
+             ['@babel/preset-env', { targets: "ie 11" }]
+           ],
+           ast: false,
+           sourceType: 'unambiguous'
+        });
+        if (babelResult && babelResult.code) {
+           transpiledCode = babelResult.code;
+        }
+      } catch (err) {
+        console.warn("Babel transpilation failed, skipping...", err);
+      }
 
       // 1. Standard Obfuscator
       const obfuscationResult = JavaScriptObfuscator.obfuscate(transpiledCode, obfuscatorOptions);
