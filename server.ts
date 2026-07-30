@@ -3,6 +3,7 @@ import cors from 'cors';
 import multer from 'multer';
 import JSZip from 'jszip';
 import JavaScriptObfuscator from 'javascript-obfuscator';
+// @ts-ignore
 import * as babel from '@babel/core';
 import { applyCustomObfuscation } from './custom-obfuscator';
 import { webcrypto } from 'crypto';
