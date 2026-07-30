@@ -5,6 +5,7 @@ import JSZip from 'jszip';
 import JavaScriptObfuscator from 'javascript-obfuscator';
 // @ts-ignore
 import * as babel from '@babel/core';
+import { v4 as uuidv4 } from 'uuid';
 import { applyCustomObfuscation } from './custom-obfuscator';
 import { webcrypto } from 'crypto';
 
@@ -14,6 +15,25 @@ app.use(express.json());
 
 // In-memory file storage for the ZIP upload
 const upload = multer({ storage: multer.memoryStorage() });
+
+// In-memory Job Store for Async Polling
+interface JobData {
+  status: 'processing' | 'completed' | 'error';
+  resultBuffer?: Buffer;
+  error?: string;
+  timestamp: number;
+}
+const jobs = new Map<string, JobData>();
+
+// Clean up old jobs every hour
+setInterval(() => {
+  const now = Date.now();
+  for (const [jobId, job] of jobs.entries()) {
+    if (now - job.timestamp > 3600000) { // 1 hour
+      jobs.delete(jobId);
+    }
+  }
+}, 3600000);
 
 // Cryptographic Helper for Anti-LLM Digital Signatures
 async function generateAntiLLMKeys() {
@@ -140,8 +160,18 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
     const loadedZip = await JSZip.loadAsync(req.file.buffer);
     const outputZip = new JSZip();
 
-    let llmPublicKey: string | undefined;
-    let llmPrivateKey: string | undefined;
+    // Create a unique job ID
+    const jobId = uuidv4();
+    jobs.set(jobId, { status: 'processing', timestamp: Date.now() });
+
+    // Respond immediately with the jobId so the client doesn't timeout
+    res.status(200).json({ jobId });
+
+    // Run the actual heavy obfuscation in the background
+    (async () => {
+      try {
+        let llmPublicKey: string | undefined;
+        let llmPrivateKey: string | undefined;
 
     if (settings.antiLLM) {
       const keys = await generateAntiLLMKeys();
@@ -200,10 +230,6 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
     };
 
     const processCode = async (code: string, isSecondaryHtmlScript: boolean = false) => {
-      // Skip tiny secondary scripts to save massive processing time
-      if (isSecondaryHtmlScript && code.trim().length < 50) {
-        return code;
-      }
 
       // 0. Transpile ES6+ to ES5 to avoid TDZ issues and convert exports (so opaque predicates don't wrap exports)
       let transpiledCode = code;
@@ -222,14 +248,13 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
         console.warn("Babel transpilation failed, skipping...", err);
       }
 
-      // Safe and FAST options for secondary HTML inline scripts to prevent browser freezing and Render timeouts
+      // Safe options for secondary HTML inline scripts to prevent browser freezing from duplication
+      // We are RESTORING full protection (ControlFlow, DeadCode) for these scripts.
+      // We only disable debugProtection and selfDefending here because having 15 debug loops on one page freezes it.
       const currentObfuscatorOptions = isSecondaryHtmlScript ? {
         ...obfuscatorOptions,
         debugProtection: false,
-        selfDefending: false,
-        controlFlowFlattening: false,
-        deadCodeInjection: false,
-        stringArrayWrappersCount: 1
+        selfDefending: false
       } : obfuscatorOptions;
 
       // 1. Standard Obfuscator
@@ -325,21 +350,59 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
       console.log(`[Mem] Heap Used: ${memUsage.toFixed(2)} MB`);
     }
 
-    if (llmPrivateKey) {
-      outputZip.file('antillm_private.key', llmPrivateKey);
-    }
+        if (llmPrivateKey) {
+          outputZip.file('antillm_private.key', llmPrivateKey);
+        }
 
-    // Generate output zip buffer
-    const outBuffer = await outputZip.generateAsync({ type: 'nodebuffer' });
+        // Generate output zip buffer
+        const outBuffer = await outputZip.generateAsync({ type: 'nodebuffer' });
 
-    res.set('Content-Type', 'application/zip');
-    res.set('Content-Disposition', 'attachment; filename="protected_project.zip"');
-    res.send(outBuffer);
+        // Update Job Status to completed
+        const job = jobs.get(jobId);
+        if (job) {
+          job.status = 'completed';
+          job.resultBuffer = outBuffer;
+        }
+
+      } catch (err: any) {
+        console.error(`[Background Error] Job ${jobId} failed:`, err);
+        const job = jobs.get(jobId);
+        if (job) {
+          job.status = 'error';
+          job.error = err.message;
+        }
+      }
+    })();
 
   } catch (error: any) {
-    console.error('Error processing ZIP:', error);
+    console.error('Error starting protection job:', error);
     res.status(500).json({ error: 'Internal Server Error', details: error.message });
   }
+});
+
+app.get('/api/v1/status/:jobId', (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found or expired' });
+  }
+  res.json({ status: job.status, error: job.error });
+});
+
+app.get('/api/v1/download/:jobId', (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found or expired' });
+  }
+  if (job.status !== 'completed' || !job.resultBuffer) {
+    return res.status(400).json({ error: 'Job is not completed yet' });
+  }
+  
+  res.set('Content-Type', 'application/zip');
+  res.set('Content-Disposition', 'attachment; filename="protected_project.zip"');
+  res.send(job.resultBuffer);
+  
+  // Optionally clean up right after download
+  jobs.delete(req.params.jobId);
 });
 
 const PORT = process.env.PORT || 8000;
