@@ -303,9 +303,7 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
       }
       
       const memUsage = process.memoryUsage().heapUsed / 1024 / 1024;
-      if (isJs || isHtml) {
-        console.log(`[Mem] Heap Used: ${memUsage.toFixed(2)} MB`);
-      }
+      console.log(`[Mem] Heap Used: ${memUsage.toFixed(2)} MB`);
     }
 
     if (llmPrivateKey) {
