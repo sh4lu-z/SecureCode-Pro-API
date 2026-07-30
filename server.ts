@@ -199,7 +199,7 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
       llmPoisoning: !!settings.llmContextFlood
     };
 
-    const processCode = async (code: string) => {
+    const processCode = async (code: string, isInlineHtml: boolean = false) => {
       // 0. Transpile ES6+ to ES5 to avoid TDZ issues and convert exports (so opaque predicates don't wrap exports)
       let transpiledCode = code;
       try {
@@ -217,15 +217,24 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
         console.warn("Babel transpilation failed, skipping...", err);
       }
 
+      // Safe options for HTML inline scripts to prevent browser freezing
+      const currentObfuscatorOptions = isInlineHtml ? {
+        ...obfuscatorOptions,
+        debugProtection: false,
+        selfDefending: false
+      } : obfuscatorOptions;
+
       // 1. Standard Obfuscator
-      const obfuscationResult = JavaScriptObfuscator.obfuscate(transpiledCode, obfuscatorOptions);
+      const obfuscationResult = JavaScriptObfuscator.obfuscate(transpiledCode, currentObfuscatorOptions);
       let result = obfuscationResult.getObfuscatedCode();
       
       // 2. Custom Babel Obfuscator
       result = applyCustomObfuscation(result, customPluginsOptions);
       
-      // 3. DRM / Anti-LLM Injection
-      result = applyAdvancedProtection(result, settings, llmPublicKey);
+      // 3. DRM / Anti-LLM Injection (Skip for HTML inline scripts to prevent multi-injection bloat)
+      if (!isInlineHtml) {
+        result = applyAdvancedProtection(result, settings, llmPublicKey);
+      }
       
       return result;
     };
@@ -280,7 +289,7 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
             }
 
             try {
-              const protectedScript = await processCode(scriptContent);
+              const protectedScript = await processCode(scriptContent, true);
               resultHtml += `${openTag}\n${protectedScript}\n${closeTag}`;
             } catch (e: any) {
               console.warn(`  -> [Warning] Failed HTML inline script: ${e.message}`);
