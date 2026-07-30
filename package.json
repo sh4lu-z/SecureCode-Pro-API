@@ -4,7 +4,7 @@
   "description": "Standalone ZIP Obfuscation API for SecureCode-Pro",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node dist/server.js",
     "build": "tsc"
   },
   "dependencies": {
