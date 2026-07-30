@@ -199,7 +199,7 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
       llmPoisoning: !!settings.llmContextFlood
     };
 
-    const processCode = async (code: string, isInlineHtml: boolean = false) => {
+    const processCode = async (code: string, isSecondaryHtmlScript: boolean = false) => {
       // 0. Transpile ES6+ to ES5 to avoid TDZ issues and convert exports (so opaque predicates don't wrap exports)
       let transpiledCode = code;
       try {
@@ -217,8 +217,8 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
         console.warn("Babel transpilation failed, skipping...", err);
       }
 
-      // Safe options for HTML inline scripts to prevent browser freezing
-      const currentObfuscatorOptions = isInlineHtml ? {
+      // Safe options for secondary HTML inline scripts to prevent browser freezing from duplication
+      const currentObfuscatorOptions = isSecondaryHtmlScript ? {
         ...obfuscatorOptions,
         debugProtection: false,
         selfDefending: false
@@ -231,8 +231,8 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
       // 2. Custom Babel Obfuscator
       result = applyCustomObfuscation(result, customPluginsOptions);
       
-      // 3. DRM / Anti-LLM Injection (Skip for HTML inline scripts to prevent multi-injection bloat)
-      if (!isInlineHtml) {
+      // 3. DRM / Anti-LLM Injection (Skip for secondary HTML inline scripts to prevent multi-injection bloat)
+      if (!isSecondaryHtmlScript) {
         result = applyAdvancedProtection(result, settings, llmPublicKey);
       }
       
@@ -272,6 +272,7 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
           let lastIndex = 0;
           const scriptRegex = /(<script\b[^>]*>)([\s\S]*?)(<\/script>)/gi;
           let match;
+          let isFirstScript = true;
 
           while ((match = scriptRegex.exec(content)) !== null) {
             const fullMatch = match[0];
@@ -289,7 +290,8 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
             }
 
             try {
-              const protectedScript = await processCode(scriptContent, true);
+              const protectedScript = await processCode(scriptContent, !isFirstScript);
+              isFirstScript = false;
               resultHtml += `${openTag}\n${protectedScript}\n${closeTag}`;
             } catch (e: any) {
               console.warn(`  -> [Warning] Failed HTML inline script: ${e.message}`);
