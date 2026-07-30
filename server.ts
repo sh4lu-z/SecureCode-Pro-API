@@ -202,7 +202,9 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
       let transpiledCode = code;
       try {
         const babelResult = await babel.transformAsync(code, {
-           presets: ['@babel/preset-env'],
+           presets: [
+             ['@babel/preset-env', { targets: "ie 11" }]
+           ],
            ast: false,
            sourceType: 'unambiguous'
         });
