@@ -10,6 +10,6 @@ RUN npm run build
 
 EXPOSE 8000
 
-ENV NODE_OPTIONS="--max-old-space-size=460"
+ENV NODE_OPTIONS="--max-old-space-size=460 --expose-gc"
 
 CMD ["npm", "start"]

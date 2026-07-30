@@ -289,6 +289,11 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
           outputZip.file(path, buffer);
         }
       }
+      
+      // Force Garbage Collection to clear memory before next file
+      if (global.gc) {
+        global.gc();
+      }
     }
 
     if (llmPrivateKey) {
