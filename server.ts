@@ -213,7 +213,7 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
           'AuthenticateUser', 'CheckPermissions', 'AdminRole', 'SuperUserScope'
         ],
         unicodeEscapeSequence: true,
-        transformObjectKeys: true
+        transformObjectKeys: false
       } : {
         identifierNamesGenerator: 'hexadecimal' as const
       }),
@@ -233,22 +233,10 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
     };
 
     const processCode = async (code: string, isInlineHtml: boolean = false) => {
-      // 0. Transpile ES6+ to ES5 to avoid TDZ issues and convert exports (so opaque predicates don't wrap exports)
+      // We removed the preliminary ES5 transpilation because it causes asyncGeneratorStep crashes 
+      // in modern React/Next.js bundles on Vercel by transpiling async/await into broken IE11 generators.
+      // Since the custom plugins (control-flow, opaque-predicates) are now ES6+ compatible, it is obsolete.
       let transpiledCode = code;
-      try {
-        const babelResult = await babel.transformAsync(code, {
-           presets: [
-             ['@babel/preset-env', { targets: "ie 11" }]
-           ],
-           ast: false,
-           sourceType: 'unambiguous'
-        });
-        if (babelResult && babelResult.code) {
-           transpiledCode = babelResult.code;
-        }
-      } catch (err) {
-        console.warn("Babel transpilation failed, skipping...", err);
-      }
 
       // Safe options for HTML inline scripts to prevent browser freezing from duplication
       // We only disable debugProtection and selfDefending here because having multiple debug loops on one page freezes it.
