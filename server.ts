@@ -226,7 +226,7 @@ app.post('/api/v1/protect', upload.single('file'), async (req, res) => {
             }),
             selfDefending: !!settings.selfDefending,
             debugProtection: !!settings.debugProtection,
-            identifiersPrefix: settings.fastMode ? Math.random().toString(36).substring(2, 4) + '_' : prefix,
+            identifiersPrefix: settings.fastMode ? 'f_' + Math.random().toString(36).substring(2, 4) + '_' : prefix,
             ignoreRequireImports: true,
             target: 'browser-no-eval' as const
           };
